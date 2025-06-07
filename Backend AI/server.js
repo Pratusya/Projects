@@ -121,10 +121,9 @@ const server = http.createServer(app);
 // --- Database Setup ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: process.env.NODE_ENV === "production" 
+    ? { rejectUnauthorized: false } 
+    : false
 });
 
 // Add database connection error handler
