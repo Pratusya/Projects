@@ -27,6 +27,7 @@ import {
   TwitterIcon,
   EmailIcon,
 } from "react-share";
+import { API_BASE_URL } from "../config";
 
 // Helper Components
 function QuizSkeleton() {
@@ -128,7 +129,9 @@ const formatQuizQuestions = (quizData, questionType) => {
       // Normalize answer to number
       formattedQuestion.correctAnswer = parseInt(q.correctAnswer, 10);
       if (isNaN(formattedQuestion.correctAnswer)) {
-        throw new Error("Invalid answer index for MCQ/Fill in the Blanks question");
+        throw new Error(
+          "Invalid answer index for MCQ/Fill in the Blanks question"
+        );
       }
       // Ensure all options are strings and array has 4 items
       if (!Array.isArray(q.options) || q.options.length !== 4) {
@@ -141,16 +144,29 @@ const formatQuizQuestions = (quizData, questionType) => {
   });
 };
 
-function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
+function QuizGenerator() {
+  const { isSignedIn, userId } = useAuth();
   const navigate = useNavigate();
-  
+
   // Initialize state from localStorage or default values
-  const [topic, setTopic] = useState(() => localStorage.getItem("quizTopic") || "");
-  const [numQuestions, setNumQuestions] = useState(() => parseInt(localStorage.getItem("quizNumQuestions")) || 5);
-  const [difficulty, setDifficulty] = useState(() => localStorage.getItem("quizDifficulty") || "Easy");
-  const [questionType, setQuestionType] = useState(() => localStorage.getItem("quizQuestionType") || "MCQ");
-  const [language, setLanguage] = useState(() => localStorage.getItem("quizLanguage") || "english");
-  const [questionLanguage, setQuestionLanguage] = useState(() => localStorage.getItem("quizQuestionLanguage") || "english");
+  const [topic, setTopic] = useState(
+    () => localStorage.getItem("quizTopic") || ""
+  );
+  const [numQuestions, setNumQuestions] = useState(
+    () => parseInt(localStorage.getItem("quizNumQuestions")) || 5
+  );
+  const [difficulty, setDifficulty] = useState(
+    () => localStorage.getItem("quizDifficulty") || "Easy"
+  );
+  const [questionType, setQuestionType] = useState(
+    () => localStorage.getItem("quizQuestionType") || "MCQ"
+  );
+  const [language, setLanguage] = useState(
+    () => localStorage.getItem("quizLanguage") || "english"
+  );
+  const [questionLanguage, setQuestionLanguage] = useState(
+    () => localStorage.getItem("quizQuestionLanguage") || "english"
+  );
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(false);
   const [userAnswers, setUserAnswers] = useState({});
@@ -274,11 +290,12 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
             !question.question.endsWith(".")
           ) {
             question.question += ".";
-          }          // Normalize answer to numeric index (0 for True, 1 for False)
-          const boolValue = typeof question.correctAnswer === "boolean"
-            ? question.correctAnswer
-            : String(question.correctAnswer).toLowerCase() === "true" || 
-              String(question.correctAnswer) === "1";
+          } // Normalize answer to numeric index (0 for True, 1 for False)
+          const boolValue =
+            typeof question.correctAnswer === "boolean"
+              ? question.correctAnswer
+              : String(question.correctAnswer).toLowerCase() === "true" ||
+                String(question.correctAnswer) === "1";
           question.correctAnswer = boolValue ? 0 : 1;
 
           // Remove options if present
@@ -378,7 +395,7 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
       console.log("Quiz payload:", requestPayload); // For debugging
 
       const response = await axios.post(
-        "http://localhost:5000/api/quizzes",
+        `${API_BASE_URL}/api/quizzes`,
         requestPayload,
         {
           headers: {
@@ -424,7 +441,8 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
 
       const quizData = validateAndParseQuizData(text);
       if (!quizData) {
-        throw new Error("Failed to parse quiz data");      }
+        throw new Error("Failed to parse quiz data");
+      }
 
       setQuiz(quizData);
       // Don't reset user answers when regenerating quiz
@@ -453,14 +471,15 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
     } finally {
       setLoading(false);
     }
-  };  const handleAnswerSelect = (questionIndex, answer, questionType) => {
+  };
+  const handleAnswerSelect = (questionIndex, answer, questionType) => {
     // For all question types, including True/False, store as numeric indices
     const numericAnswer = parseInt(answer, 10);
-      
+
     if (!isNaN(numericAnswer)) {
-      setUserAnswers(prev => ({
+      setUserAnswers((prev) => ({
         ...prev,
-        [questionIndex]: numericAnswer
+        [questionIndex]: numericAnswer,
       }));
     }
   };
@@ -488,7 +507,8 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
         return;
       }
 
-      const rawScore = calculateScore();      const formattedUserAnswers = quiz.map((question, index) => {
+      const rawScore = calculateScore();
+      const formattedUserAnswers = quiz.map((question, index) => {
         const userAnswer = userAnswers[index];
         // For all question types, we're using numeric indices
         // True/False: 0=True, 1=False
@@ -529,11 +549,12 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
             username: userId,
           },
         }
-      );      if (response.data) {
+      );
+      if (response.data) {
         // Store quiz results
         localStorage.setItem("quizScore", rawScore);
         localStorage.setItem("quizTotal", quiz.length);
-        
+
         // Clear quiz configurations after successful submission
         localStorage.removeItem("quizTopic");
         localStorage.removeItem("quizNumQuestions");
@@ -633,7 +654,11 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
     setIsShareModalOpen(true);
   };
   const retakeQuiz = () => {
-    if (window.confirm("Are you sure you want to clear all your answers and start over?")) {
+    if (
+      window.confirm(
+        "Are you sure you want to clear all your answers and start over?"
+      )
+    ) {
       setUserAnswers({});
       toast.success("Answers cleared. You can now retake the quiz!");
     }
@@ -650,7 +675,8 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
         <CardContent>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="topic">Topic</Label>              <Input
+              <Label htmlFor="topic">Topic</Label>{" "}
+              <Input
                 id="topic"
                 value={topic}
                 onChange={(e) => {
@@ -664,12 +690,14 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
 
             {/* Language Selection */}
             <div>
-              <Label htmlFor="language">Quiz Language</Label>              <Select 
-                value={language} 
+              <Label htmlFor="language">Quiz Language</Label>{" "}
+              <Select
+                value={language}
                 onValueChange={(newValue) => {
                   setLanguage(newValue);
                   localStorage.setItem("quizLanguage", newValue);
-                }}>
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select quiz language" />
                 </SelectTrigger>
@@ -685,7 +713,8 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
               <div>
                 <Label htmlFor="questionLanguage">Question Format</Label>
                 <Select
-                  value={questionLanguage}                  onValueChange={(newValue) => {
+                  value={questionLanguage}
+                  onValueChange={(newValue) => {
                     setQuestionLanguage(newValue);
                     localStorage.setItem("quizQuestionLanguage", newValue);
                   }}
@@ -707,7 +736,8 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
               <div>
                 <Label htmlFor="numQuestions">Number of Questions</Label>
                 <Select
-                  value={numQuestions.toString()}                  onValueChange={(value) => {
+                  value={numQuestions.toString()}
+                  onValueChange={(value) => {
                     const numValue = parseInt(value, 10);
                     setNumQuestions(numValue);
                     localStorage.setItem("quizNumQuestions", numValue);
@@ -726,12 +756,14 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
                 </Select>
               </div>
               <div>
-                <Label htmlFor="difficulty">Difficulty</Label>                <Select 
-                  value={difficulty} 
+                <Label htmlFor="difficulty">Difficulty</Label>{" "}
+                <Select
+                  value={difficulty}
                   onValueChange={(newValue) => {
                     setDifficulty(newValue);
                     localStorage.setItem("quizDifficulty", newValue);
-                  }}>
+                  }}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select difficulty" />
                   </SelectTrigger>
@@ -746,12 +778,14 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
               </div>
             </div>
             <div>
-              <Label htmlFor="questionType">Question Type</Label>              <Select 
-                value={questionType} 
+              <Label htmlFor="questionType">Question Type</Label>{" "}
+              <Select
+                value={questionType}
                 onValueChange={(newValue) => {
                   setQuestionType(newValue);
                   localStorage.setItem("quizQuestionType", newValue);
-                }}>
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select question type" />
                 </SelectTrigger>
@@ -852,16 +886,18 @@ function QuizGenerator() {  const { isSignedIn, userId } = useAuth();
                         ))}{" "}
                       {questionType === "True/False" && (
                         <div className="flex space-x-4 justify-center">
-                          { [
+                          {[
                             { value: 0, label: "True" },
-                            { value: 1, label: "False" }
+                            { value: 1, label: "False" },
                           ].map((option) => (
                             <label
                               key={option.label}
                               className={`flex items-center justify-center space-x-3 p-4 rounded-md transition-colors cursor-pointer border-2 min-w-[120px]
-                                ${userAnswers[index] === option.value 
-                                  ? 'bg-primary-100 border-primary-500 dark:bg-primary-900/30' 
-                                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 border-transparent'}`}
+                                ${
+                                  userAnswers[index] === option.value
+                                    ? "bg-primary-100 border-primary-500 dark:bg-primary-900/30"
+                                    : "hover:bg-gray-100 dark:hover:bg-gray-700 border-transparent"
+                                }`}
                             >
                               <input
                                 type="radio"
