@@ -6,18 +6,19 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: "dist",
-    assetsDir: "assets",
+    emptyOutDir: true,
     sourcemap: true,
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: "https://quizbackend-two.vercel.app",
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router-dom"],
+        },
       },
+    },
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });
