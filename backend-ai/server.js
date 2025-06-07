@@ -162,20 +162,30 @@ const corsOptions = {
   origin: [
     "https://quiz-ai-frontend-mu.vercel.app",
     "http://localhost:5173",
-    process.env.CLIENT_URL,
-  ].filter(Boolean),
+    process.env.CLIENT_URL
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "user-id", "username", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "user-id", "username"],
   exposedHeaders: ["set-cookie"],
-  maxAge: 86400,
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
+  maxAge: 86400
 };
 
-// Apply CORS before other middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// Add this before your routes
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://quiz-ai-frontend-mu.vercel.app");
+  res.header("Access-Control-Allow-Credentials", true);
+  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, user-id, username");
+  
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
 // --- Auth Middleware ---
 const simpleAuth = (req, res, next) => {

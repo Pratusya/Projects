@@ -15,7 +15,7 @@
         "Access-Control-Allow-Origin": "https://quiz-ai-frontend-mu.vercel.app",
         "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Methods": "GET,PUT,POST,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, user-id, username, Authorization"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, user-id, username"
       }
     }
   ]
