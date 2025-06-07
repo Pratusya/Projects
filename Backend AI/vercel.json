@@ -12,12 +12,7 @@
       "dest": "server.js"
     }
   ],
-  "buildCommand": "npm install",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/*.js": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  }
+  "installCommand": "npm install",
+  "buildCommand": "npm install && npx prisma generate && npm run build",
+  "outputDirectory": "dist"
 }
