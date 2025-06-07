@@ -871,8 +871,4 @@ const startServer = async () => {
   }
 };
 
-if (require.main === module) {
-  startServer();
-}
-
-module.exports = { app, pool, server, startServer };
+module.exports = app;
