@@ -379,7 +379,6 @@ function QuizGenerator() {
   };
   const saveQuiz = async (quizData) => {
     try {
-      // Format questions based on question type
       const formattedQuestions = formatQuizQuestions(quizData, questionType);
 
       const requestPayload = {
@@ -392,10 +391,8 @@ function QuizGenerator() {
         questions: formattedQuestions,
       };
 
-      console.log("Quiz payload:", requestPayload); // For debugging
-
       const response = await axios.post(
-        `${API_BASE_URL}/api/quizzes`,
+        `${API_BASE_URL}/quizzes`, // Remove extra slash
         requestPayload,
         {
           headers: {
@@ -403,15 +400,15 @@ function QuizGenerator() {
             "user-id": userId,
             username: userId,
           },
+          withCredentials: true, // Add this
         }
       );
 
       if (response.data?.status === "success" && response.data?.quiz?.id) {
         setQuizId(response.data.quiz.id);
         return response.data.quiz.id;
-      } else {
-        throw new Error("No quiz ID received from server");
       }
+      throw new Error("No quiz ID received from server");
     } catch (error) {
       console.error("Error saving quiz:", error);
       throw new Error(error.response?.data?.message || "Failed to save quiz");

@@ -161,11 +161,16 @@ const validateDatabaseConnection = async () => {
 const corsOptions = {
   origin: [
     "https://quiz-ai-frontend-mu.vercel.app",
+    "http://localhost:5173",
     process.env.CLIENT_URL,
   ].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  maxAge: 86400, // 24 hours
+  allowedHeaders: ["Content-Type", "user-id", "username", "Authorization"],
+  exposedHeaders: ["set-cookie"],
+  maxAge: 86400,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
 // Apply CORS before other middleware
@@ -809,22 +814,30 @@ const logError = (error, label = "Error") => {
   });
 };
 
+// Add this before your routes
+app.use((req, res, next) => {
+  res.header(
+    "Access-Control-Allow-Origin",
+    "https://quiz-ai-frontend-mu.vercel.app"
+  );
+  res.header("Access-Control-Allow-Credentials", true);
+  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, user-id, username, Authorization"
+  );
+  next();
+});
+
 // Update your error handler
 app.use((err, req, res, next) => {
-  console.error("Error:", {
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  });
-
-  res.status(err.statusCode || 500).json({
+  console.error(err.stack);
+  res.status(500).json({
     status: "error",
     message:
       process.env.NODE_ENV === "production"
         ? "Internal server error"
         : err.message,
-    code: err.code || "INTERNAL_SERVER_ERROR",
   });
 });
 

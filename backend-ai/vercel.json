@@ -2,14 +2,21 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.js",
+      "src": "server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/server.js",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://quiz-ai-frontend-mu.vercel.app",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET,PUT,POST,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, user-id, username, Authorization"
+      }
     }
   ]
 }
