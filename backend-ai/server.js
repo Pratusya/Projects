@@ -129,19 +129,10 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-// Add database connection error handler
+// Add a connection test
 pool.on("error", (err) => {
-  console.error("Unexpected database error:", err);
-  // Don't exit on transient errors
-  if (err.code === "PROTOCOL_CONNECTION_LOST") {
-    console.error("Database connection was closed. Attempting to reconnect...");
-  }
-  if (err.code === "ER_CON_COUNT_ERROR") {
-    console.error("Database has too many connections.");
-  }
-  if (err.code === "ECONNREFUSED") {
-    console.error("Database connection was refused.");
-  }
+  console.error("Unexpected error on idle client", err);
+  process.exit(-1);
 });
 
 // Add this after pool creation
@@ -162,24 +153,30 @@ const corsOptions = {
   origin: [
     "https://quiz-ai-frontend-mu.vercel.app",
     "http://localhost:5173",
-    process.env.CLIENT_URL
+    process.env.CLIENT_URL,
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "user-id", "username"],
   exposedHeaders: ["set-cookie"],
-  maxAge: 86400
+  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
 
 // Add this before your routes
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://quiz-ai-frontend-mu.vercel.app");
+  res.header(
+    "Access-Control-Allow-Origin",
+    "https://quiz-ai-frontend-mu.vercel.app"
+  );
   res.header("Access-Control-Allow-Credentials", true);
   res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, user-id, username");
-  
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, user-id, username"
+  );
+
   // Handle preflight requests
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -625,6 +622,263 @@ const processQuizStatistics = (rows) => {
     difficulty_levels_attempted: Array.from(difficulties).join(", ") || "None",
   };
 };
+
+// Update the statistics endpoint
+app.get("/api/statistics", simpleAuth, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    // Get overall statistics
+    const [quizResults, quizzes, monthlyStats] = await Promise.all([
+      client.query(
+        `
+        SELECT 
+          COUNT(DISTINCT quiz_id) as total_quizzes_taken,
+          COUNT(*) as total_attempts,
+          COALESCE(AVG(CASE WHEN total_questions > 0 
+            THEN (score::float / total_questions * 100) 
+            ELSE 0 END), 0) as average_score,
+          COALESCE(MAX(score), 0) as highest_score,
+          MIN(completed_at) as first_attempt,
+          MAX(completed_at) as last_attempt
+        FROM quiz_results 
+        WHERE user_id = $1
+      `,
+        [req.user.userId]
+      ),
+
+      // Get all unique quizzes for topic and difficulty tracking
+      client.query(
+        `
+        SELECT DISTINCT topic, difficulty 
+        FROM quizzes 
+        WHERE user_id = $1 
+        AND id IN (SELECT quiz_id FROM quiz_results WHERE user_id = $1)
+      `,
+        [req.user.userId]
+      ),
+
+      // Get monthly progress
+      client.query(
+        `
+        SELECT 
+          DATE_TRUNC('month', completed_at) as month,
+          COUNT(*) as attempts,
+          AVG(CASE WHEN total_questions > 0 
+            THEN (score::float / total_questions * 100) 
+            ELSE 0 END) as average_score
+        FROM quiz_results
+        WHERE user_id = $1
+        GROUP BY DATE_TRUNC('month', completed_at)
+        ORDER BY month DESC
+        LIMIT 12
+      `,
+        [req.user.userId]
+      ),
+    ]);
+
+    // Process quiz statistics
+    const { topics_attempted, difficulty_levels_attempted } =
+      processQuizStatistics(quizzes.rows);
+
+    // Format the response
+    const statistics = {
+      overall: {
+        total_quizzes_taken: parseInt(
+          quizResults.rows[0]?.total_quizzes_taken || 0
+        ),
+        total_attempts: parseInt(quizResults.rows[0]?.total_attempts || 0),
+        average_score: parseFloat(
+          quizResults.rows[0]?.average_score || 0
+        ).toFixed(2),
+        highest_score: parseInt(quizResults.rows[0]?.highest_score || 0),
+        first_attempt: quizResults.rows[0]?.first_attempt || null,
+        last_attempt: quizResults.rows[0]?.last_attempt || null,
+        topics_attempted,
+        difficulty_levels_attempted,
+      },
+      monthly_progress: monthlyStats.rows.map((stat) => ({
+        month: stat.month,
+        attempts: parseInt(stat.attempts),
+        average_score: parseFloat(stat.average_score).toFixed(2),
+      })),
+    };
+
+    res.json({
+      status: "success",
+      statistics,
+    });
+  } catch (error) {
+    console.error("Statistics error:", error);
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+// Update the quiz details endpoint
+app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `
+      WITH quiz_attempts AS (
+        SELECT 
+          quiz_id,
+          COUNT(*) as total_attempts,
+          MAX(score) as highest_score,
+          AVG(CAST(score AS FLOAT)) as avg_score,
+          jsonb_agg(
+            jsonb_build_object(
+              'id', id,
+              'score', score,
+              'total_questions', total_questions,
+              'time_taken', time_taken,
+              'completed_at', completed_at,
+              'user_answers', user_answers,
+              'attempt_date', completed_at
+            ) ORDER BY completed_at DESC
+          ) as attempt_history
+        FROM quiz_results
+        WHERE quiz_id = $1 AND user_id = $2
+        GROUP BY quiz_id
+      )
+      SELECT 
+        q.id,
+        q.title,
+        q.topic,
+        q.num_questions,
+        q.difficulty,
+        q.question_type,
+        q.language,
+        q.questions,
+        q.created_at,
+        COALESCE(qa.total_attempts, 0) as attempts_count,
+        COALESCE(qa.highest_score, 0) as highest_score,
+        COALESCE(qa.avg_score, 0) as average_score,
+        qa.attempt_history
+      FROM quizzes q
+      LEFT JOIN quiz_attempts qa ON q.id = qa.quiz_id
+      WHERE q.id = $1 AND q.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Quiz not found",
+      });
+    }
+
+    const quizDetails = result.rows[0];
+
+    // Format response with status field to match frontend expectations
+    const response = {
+      status: "success",
+      quiz: {
+        id: quizDetails.id,
+        topic: quizDetails.topic,
+        title: quizDetails.title,
+        difficulty: quizDetails.difficulty,
+        question_type: quizDetails.question_type,
+        num_questions: quizDetails.num_questions,
+        created_at: quizDetails.created_at,
+        highest_score: parseInt(quizDetails.highest_score),
+        attempts_count: parseInt(quizDetails.attempts_count),
+        questions: quizDetails.questions.map((q, index) => ({
+          question: q.question,
+          options: q.options || [],
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation || "No explanation provided",
+        })),
+        attempt_history: (quizDetails.attempt_history || []).map((attempt) => ({
+          ...attempt,
+          score: parseInt(attempt.score),
+          total_questions: parseInt(attempt.total_questions),
+          time_taken: parseInt(attempt.time_taken),
+        })),
+      },
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error("Quiz details error:", {
+      error,
+      quizId: req.params.id,
+      userId: req.user.userId,
+    });
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+// Add this near the top of your file
+const errorHandler = (err, req, res, next) => {
+  console.error("Error:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    body: req.body,
+  });
+
+  res.status(err.status || 500).json({
+    status: "error",
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal server error"
+        : err.message,
+  });
+};
+
+// Add this after your routes
+app.use(errorHandler);
+
+// Update your quiz creation endpoint
+app.post("/api/quizzes", simpleAuth, async (req, res, next) => {
+  try {
+    const { error, value } = quizSchema.validate(req.body);
+
+    if (error) {
+      return res.status(400).json({
+        status: "error",
+        message: error.details.map((d) => d.message).join(", "),
+      });
+    }
+
+    // Validate questions array
+    if (!Array.isArray(value.questions) || value.questions.length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Questions array is required and must not be empty",
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO quizzes (
+        user_id, title, topic, num_questions, 
+        difficulty, question_type, questions, language
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, title, topic, num_questions, difficulty, question_type, language`,
+      [
+        req.user.userId,
+        value.title,
+        value.topic,
+        value.numQuestions,
+        value.difficulty,
+        value.questionType,
+        JSON.stringify(value.questions),
+        value.language || "english",
+      ]
+    );
+
+    res.status(201).json({
+      status: "success",
+      quiz: result.rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Update the statistics endpoint
 app.get("/api/statistics", simpleAuth, async (req, res, next) => {
