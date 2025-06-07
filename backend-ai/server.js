@@ -121,10 +121,9 @@ const server = http.createServer(app);
 // --- Database Setup ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
 // Add database connection error handler
@@ -146,7 +145,7 @@ pool.on("error", (err) => {
 const corsOptions = {
   origin: [
     "http://localhost:5173",
-    "https://quiz-ai-frontend-mu.vercel.app/", // Add your frontend Vercel URL
+    "https://quiz-ai-frontend-mu.vercel.app",
     process.env.CLIENT_URL,
   ].filter(Boolean),
   credentials: true,
@@ -158,9 +157,6 @@ const corsOptions = {
     "authorization",
     "Authorization",
   ],
-  exposedHeaders: ["Content-Range", "X-Content-Range"],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
 };
 
 // Apply CORS before other middleware
@@ -276,6 +272,13 @@ app.get("/health", async (req, res) => {
       message: "Service unavailable",
     });
   }
+});
+
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Quiz API is running",
+  });
 });
 
 // Create Quiz
@@ -788,12 +791,24 @@ app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
   }
 });
 
-// --- Error Handler ---
+// Add this near the top of your server.js
+const logError = (error, label = "Error") => {
+  console.error(`[${label}]:`, {
+    message: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+};
+
+// Update your error handler
 app.use((err, req, res, next) => {
-  console.error("API Error:", err);
+  logError(err, "API Error");
   res.status(err.statusCode || 500).json({
     status: "error",
-    message: err.message || "Internal server error",
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal server error"
+        : err.message,
   });
 });
 
