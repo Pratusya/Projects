@@ -121,9 +121,10 @@ const server = http.createServer(app);
 // --- Database Setup ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" 
-    ? { rejectUnauthorized: false } 
-    : false
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 // Add database connection error handler
@@ -145,7 +146,7 @@ pool.on("error", (err) => {
 const corsOptions = {
   origin: [
     "http://localhost:5173",
-    "https://quiz-ai-frontend.vercel.app", // Add your frontend Vercel URL
+    "https://quiz-ai-frontend-mu.vercel.app/", // Add your frontend Vercel URL
     process.env.CLIENT_URL,
   ].filter(Boolean),
   credentials: true,
