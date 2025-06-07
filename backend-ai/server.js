@@ -124,6 +124,9 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false,
   },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
 // Add database connection error handler
@@ -141,22 +144,28 @@ pool.on("error", (err) => {
   }
 });
 
+// Add this after pool creation
+const validateDatabaseConnection = async () => {
+  try {
+    const client = await pool.connect();
+    await client.query("SELECT NOW()");
+    client.release();
+    return true;
+  } catch (err) {
+    console.error("Database connection error:", err);
+    return false;
+  }
+};
+
 // --- Middleware ---
 const corsOptions = {
   origin: [
-    "http://localhost:5173",
     "https://quiz-ai-frontend-mu.vercel.app",
     process.env.CLIENT_URL,
   ].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "user-id",
-    "username",
-    "authorization",
-    "Authorization",
-  ],
+  maxAge: 86400, // 24 hours
 };
 
 // Apply CORS before other middleware
@@ -802,13 +811,20 @@ const logError = (error, label = "Error") => {
 
 // Update your error handler
 app.use((err, req, res, next) => {
-  logError(err, "API Error");
+  console.error("Error:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
   res.status(err.statusCode || 500).json({
     status: "error",
     message:
       process.env.NODE_ENV === "production"
         ? "Internal server error"
         : err.message,
+    code: err.code || "INTERNAL_SERVER_ERROR",
   });
 });
 
@@ -835,34 +851,23 @@ const checkPort = (port) => {
 
 const startServer = async () => {
   try {
-    const PORT = process.env.PORT || 5000;
-
-    // Check if port is available
-    const portAvailable = await checkPort(PORT);
-    if (!portAvailable) {
-      throw new Error(`Port ${PORT} is in use. Please use a different port.`);
+    const dbConnected = await validateDatabaseConnection();
+    if (!dbConnected) {
+      throw new Error("Could not connect to database");
     }
 
-    console.log("Attempting to connect to database...");
-    await pool.query("SELECT 1"); // Test database connection
-    console.log("Database connection successful.");
+    const PORT = process.env.PORT || 3000;
 
-    console.log("Initializing database tables...");
-    await initializeTables();
-    console.log("Database initialization complete.");
+    await initializeTables().catch((err) => {
+      console.warn("Table initialization warning:", err);
+    });
 
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      console.log(`CORS enabled for: ${corsOptions.origin.join(", ")}`);
     });
   } catch (error) {
-    console.error("----------------------------------------");
-    console.error(">>> FATAL: Failed to start server <<<");
-    console.error(
-      error instanceof DatabaseError ? error : new DatabaseError(error.message)
-    );
-    console.error("----------------------------------------");
-    process.exit(1);
+    console.error("Server startup error:", error);
+    throw error;
   }
 };
 
