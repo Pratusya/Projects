@@ -121,27 +121,34 @@ const server = http.createServer(app);
 // --- Database Setup ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 // Add database connection error handler
-pool.on('error', (err) => {
-  console.error('Unexpected database error:', err);
+pool.on("error", (err) => {
+  console.error("Unexpected database error:", err);
   // Don't exit on transient errors
-  if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-    console.error('Database connection was closed. Attempting to reconnect...');
+  if (err.code === "PROTOCOL_CONNECTION_LOST") {
+    console.error("Database connection was closed. Attempting to reconnect...");
   }
-  if (err.code === 'ER_CON_COUNT_ERROR') {
-    console.error('Database has too many connections.');
+  if (err.code === "ER_CON_COUNT_ERROR") {
+    console.error("Database has too many connections.");
   }
-  if (err.code === 'ECONNREFUSED') {
-    console.error('Database connection was refused.');
+  if (err.code === "ECONNREFUSED") {
+    console.error("Database connection was refused.");
   }
 });
 
 // --- Middleware ---
 const corsOptions = {
-  origin: ["http://localhost:5173", process.env.CLIENT_URL].filter(Boolean),
+  origin: [
+    "http://localhost:5173",
+    "https://quiz-ai-frontend.vercel.app", // Add your frontend Vercel URL
+    process.env.CLIENT_URL,
+  ].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: [
@@ -395,7 +402,9 @@ app.get("/api/quizzes", simpleAuth, async (req, res, next) => {
 
     const [quizzes, countResult] = await Promise.all([
       pool.query(query, [req.user.userId, limit, offset]),
-      pool.query('SELECT COUNT(*) FROM quizzes WHERE user_id = $1', [req.user.userId])
+      pool.query("SELECT COUNT(*) FROM quizzes WHERE user_id = $1", [
+        req.user.userId,
+      ]),
     ]);
 
     const totalQuizzes = parseInt(countResult.rows[0].count);
@@ -403,17 +412,17 @@ app.get("/api/quizzes", simpleAuth, async (req, res, next) => {
 
     res.json({
       status: "success",
-      quizzes: quizzes.rows.map(quiz => ({
+      quizzes: quizzes.rows.map((quiz) => ({
         ...quiz,
         attempts_count: parseInt(quiz.attempts_count || 0),
-        highest_score: parseInt(quiz.highest_score || 0)
+        highest_score: parseInt(quiz.highest_score || 0),
       })),
       pagination: {
         currentPage: page,
         totalPages,
         totalQuizzes,
-        hasMore: page < totalPages
-      }
+        hasMore: page < totalPages,
+      },
     });
   } catch (error) {
     next(error);
@@ -578,15 +587,15 @@ app.post("/api/quiz-history", simpleAuth, async (req, res, next) => {
 const processQuizStatistics = (rows) => {
   const topics = new Set();
   const difficulties = new Set();
-  
-  rows.forEach(quiz => {
+
+  rows.forEach((quiz) => {
     if (quiz.topic) topics.add(quiz.topic);
     if (quiz.difficulty) difficulties.add(quiz.difficulty);
   });
 
   return {
-    topics_attempted: Array.from(topics).join(', ') || 'None',
-    difficulty_levels_attempted: Array.from(difficulties).join(', ') || 'None'
+    topics_attempted: Array.from(topics).join(", ") || "None",
+    difficulty_levels_attempted: Array.from(difficulties).join(", ") || "None",
   };
 };
 
@@ -596,7 +605,8 @@ app.get("/api/statistics", simpleAuth, async (req, res, next) => {
   try {
     // Get overall statistics
     const [quizResults, quizzes, monthlyStats] = await Promise.all([
-      client.query(`
+      client.query(
+        `
         SELECT 
           COUNT(DISTINCT quiz_id) as total_quizzes_taken,
           COUNT(*) as total_attempts,
@@ -608,18 +618,24 @@ app.get("/api/statistics", simpleAuth, async (req, res, next) => {
           MAX(completed_at) as last_attempt
         FROM quiz_results 
         WHERE user_id = $1
-      `, [req.user.userId]),
+      `,
+        [req.user.userId]
+      ),
 
       // Get all unique quizzes for topic and difficulty tracking
-      client.query(`
+      client.query(
+        `
         SELECT DISTINCT topic, difficulty 
         FROM quizzes 
         WHERE user_id = $1 
         AND id IN (SELECT quiz_id FROM quiz_results WHERE user_id = $1)
-      `, [req.user.userId]),
+      `,
+        [req.user.userId]
+      ),
 
       // Get monthly progress
-      client.query(`
+      client.query(
+        `
         SELECT 
           DATE_TRUNC('month', completed_at) as month,
           COUNT(*) as attempts,
@@ -631,34 +647,41 @@ app.get("/api/statistics", simpleAuth, async (req, res, next) => {
         GROUP BY DATE_TRUNC('month', completed_at)
         ORDER BY month DESC
         LIMIT 12
-      `, [req.user.userId])
+      `,
+        [req.user.userId]
+      ),
     ]);
 
     // Process quiz statistics
-    const { topics_attempted, difficulty_levels_attempted } = processQuizStatistics(quizzes.rows);
+    const { topics_attempted, difficulty_levels_attempted } =
+      processQuizStatistics(quizzes.rows);
 
     // Format the response
     const statistics = {
       overall: {
-        total_quizzes_taken: parseInt(quizResults.rows[0]?.total_quizzes_taken || 0),
+        total_quizzes_taken: parseInt(
+          quizResults.rows[0]?.total_quizzes_taken || 0
+        ),
         total_attempts: parseInt(quizResults.rows[0]?.total_attempts || 0),
-        average_score: parseFloat(quizResults.rows[0]?.average_score || 0).toFixed(2),
+        average_score: parseFloat(
+          quizResults.rows[0]?.average_score || 0
+        ).toFixed(2),
         highest_score: parseInt(quizResults.rows[0]?.highest_score || 0),
         first_attempt: quizResults.rows[0]?.first_attempt || null,
         last_attempt: quizResults.rows[0]?.last_attempt || null,
         topics_attempted,
-        difficulty_levels_attempted
+        difficulty_levels_attempted,
       },
-      monthly_progress: monthlyStats.rows.map(stat => ({
+      monthly_progress: monthlyStats.rows.map((stat) => ({
         month: stat.month,
         attempts: parseInt(stat.attempts),
-        average_score: parseFloat(stat.average_score).toFixed(2)
-      }))
+        average_score: parseFloat(stat.average_score).toFixed(2),
+      })),
     };
 
     res.json({
       status: "success",
-      statistics
+      statistics,
     });
   } catch (error) {
     console.error("Statistics error:", error);
@@ -672,7 +695,8 @@ app.get("/api/statistics", simpleAuth, async (req, res, next) => {
 app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const result = await client.query(`
+    const result = await client.query(
+      `
       WITH quiz_attempts AS (
         SELECT 
           quiz_id,
@@ -717,7 +741,7 @@ app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Quiz not found"
+        message: "Quiz not found",
       });
     }
 
@@ -740,15 +764,15 @@ app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
           question: q.question,
           options: q.options || [],
           correctAnswer: q.correctAnswer,
-          explanation: q.explanation || "No explanation provided"
+          explanation: q.explanation || "No explanation provided",
         })),
-        attempt_history: (quizDetails.attempt_history || []).map(attempt => ({
+        attempt_history: (quizDetails.attempt_history || []).map((attempt) => ({
           ...attempt,
           score: parseInt(attempt.score),
           total_questions: parseInt(attempt.total_questions),
-          time_taken: parseInt(attempt.time_taken)
-        }))
-      }
+          time_taken: parseInt(attempt.time_taken),
+        })),
+      },
     };
 
     res.json(response);
@@ -756,7 +780,7 @@ app.get("/api/quizzes/:id", simpleAuth, async (req, res, next) => {
     console.error("Quiz details error:", {
       error,
       quizId: req.params.id,
-      userId: req.user.userId
+      userId: req.user.userId,
     });
     next(error);
   } finally {
@@ -776,16 +800,17 @@ app.use((err, req, res, next) => {
 // --- Server Startup ---
 const checkPort = (port) => {
   return new Promise((resolve, reject) => {
-    const tester = require('net').createServer()
-      .once('error', err => {
-        if (err.code === 'EADDRINUSE') {
+    const tester = require("net")
+      .createServer()
+      .once("error", (err) => {
+        if (err.code === "EADDRINUSE") {
           console.error(`Port ${port} is busy. Please try another port.`);
           resolve(false);
         } else {
           reject(err);
         }
       })
-      .once('listening', () => {
+      .once("listening", () => {
         tester.close();
         resolve(true);
       })
@@ -796,7 +821,7 @@ const checkPort = (port) => {
 const startServer = async () => {
   try {
     const PORT = process.env.PORT || 5000;
-    
+
     // Check if port is available
     const portAvailable = await checkPort(PORT);
     if (!portAvailable) {
@@ -818,7 +843,9 @@ const startServer = async () => {
   } catch (error) {
     console.error("----------------------------------------");
     console.error(">>> FATAL: Failed to start server <<<");
-    console.error(error instanceof DatabaseError ? error : new DatabaseError(error.message));
+    console.error(
+      error instanceof DatabaseError ? error : new DatabaseError(error.message)
+    );
     console.error("----------------------------------------");
     process.exit(1);
   }
